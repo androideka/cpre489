@@ -18,30 +18,37 @@ int main() {
     // Home laptop IP:
     ServAddr.sin_addr.s_addr = inet_addr("205.237.185.196");
     fd = socket(AF_INET, SOCK_STREAM, 0);
-    bind(fd, (struct sockaddr*) &ServAddr, sizeof(ServAddr));
+    int error = bind(fd, (struct sockaddr*) &ServAddr, sizeof(ServAddr));
+    if( error < 0 )
+    {
+        perror("Bind error.\n");
+    }
     listen(fd, 5);
 
-    for( ; ; )
-    {
+    for( ; ; ) {
         s = accept(fd, (struct sockaddr *) &ClientAddr, (socklen_t *) &ClientAddrLen);
+        if (s < 0) {
+            perror("Accept error.\n");
+        }
         system("ruptime > uptime.txt");
 
         size_t length = 0;
         FILE *fp = fopen("uptime.txt", "r");
-        if( fp != NULL )
-        {
+        if (fp != NULL) {
             length = fread(buffer, sizeof(char), 1024, fp);
-            if( length == 0 )
-            {
+            if (length == 0) {
                 fputs("Error reading file", stderr);
             }
-            else
-            {
+            else {
                 buffer[length++] = '\0';
             }
         }
 
-        write(s, buffer, length);
+        int err = write(s, buffer, length);
+        if (err < 0)
+        {
+            perror("Write error.\n");
+        }
 
         close(s);
     }
