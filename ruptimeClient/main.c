@@ -15,30 +15,40 @@ int main() {
     int fd, n;
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = 7;
-    servaddr.sin_addr.s_addr = inet_addr("205.237.185.196");
-
+    // HOME IP: 205.237.185.196
+    servaddr.sin_addr.s_addr = inet_addr("192.168.1.105");
+    int err = 0;
     fd = socket(AF_INET, SOCK_STREAM, 0);
-    int err = connect(fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+    if( fd < 0 )
+    {
+        perror("Socket error.");
+    }
+    err = connect(fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
     if( err < 0 )
     {
-        perror("Connect error.\n");
+        perror("Connect error.");
     }
     n = (int) read(fd, uptime, 1024);
     if( n < 0 )
     {
-        perror("Read error.\n");
+        perror("Read error.");
     }
-    system("host 205.237.185.196 > hostname.txt");
+    system("host 192.168.1.105 > hostname.txt");
     FILE* hostname = fopen("hostname.txt", "r");
     char* lineptr = "";
-    char* token;
+    char* token, *temp;
     getline((char **) lineptr, 0, hostname);
     token = strtok(lineptr, " ");
     while( token != NULL )
     {
+        temp = token;
         token = strtok(NULL, " ");
+        if(token == NULL)
+        {
+            break;
+        }
     }
-    printf("%s uptime: %s\n", token, uptime);
+    printf("%s uptime: %s\n", temp, uptime);
 
     return 0;
 }
