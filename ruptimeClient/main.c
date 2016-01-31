@@ -18,8 +18,16 @@ int main() {
     servaddr.sin_addr.s_addr = inet_addr("205.237.185.196");
 
     fd = socket(AF_INET, SOCK_STREAM, 0);
-    connect(fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+    int err = connect(fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+    if( err < 0 )
+    {
+        perror("Connect error.\n");
+    }
     n = (int) read(fd, uptime, 1024);
+    if( n < 0 )
+    {
+        perror("Read error.\n");
+    }
     system("host 205.237.185.196 > hostname.txt");
     FILE* hostname = fopen("hostname.txt", "r");
     char* lineptr = "";
