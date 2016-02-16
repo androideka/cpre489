@@ -1,3 +1,4 @@
+#include <argp.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -9,6 +10,18 @@
 
 
 static char* doc = "CprE 489 Lab 3 - UDP Experiments";
+
+// list of options supported
+static struct argp_option options[] =
+{
+	{"source-IP", 's', "SOURCEIP", 0, "IP number of incoming traffic"},
+	{"source-port", 'o', "SOURCEPORT", 0, "Port of incoming traffic"},
+	{"dest-IP", 'd', "DESTIP", 0, "Which IP to reroute incoming traffic"},
+    {"dest-port", 'p', "DESTPORT", 0, "Which port to send data to"},
+    {"loss-rate", 'l', "LOSSRATE", 0, "What loss rate to impose on the traffic"}
+	//{0}
+};
+
 
 /// argument structure to store the results of command line parsing
 struct arguments
@@ -68,30 +81,24 @@ int main(int argc, char* argv[]) {
     argp_parse(&argp, argc, argv, 0, 0, arguments);
 
     char buffer[1024];
-    int server, rcv_len, fd, ClientAddrLen = sizeof(client_addr);
+    int rcv_len, fd, ClientAddrLen = sizeof(client_addr);
     int server_len = sizeof(server_addr);
     int packet_count = 0;
 
     addr.sin_family = AF_INET;
     addr.sin_port = arguments->source_port;
-    addr.sin_addr.s_addr = inet_addr("205.237.185.196");
+    addr.sin_addr.s_addr = inet_addr("192.168.1.144");
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = arguments->dest_port;
     server_addr.sin_addr.s_addr = inet_addr(arguments->dest_IP);
 
     fd = socket(AF_INET, SOCK_DGRAM, 0);
-    server = socket(AF_INET, SOCK_DGRAM, 0);
 
     int error = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
     if( error < 0 )
     {
-        perror("Bind error 1");
-    }
-    error = bind(server, (struct sockaddr *) &server, sizeof(server));
-    if( error < 0 )
-    {
-        perror("Bind error 2");
+        perror("Bind error");
     }
 
     listen(fd, 0);
@@ -107,7 +114,7 @@ int main(int argc, char* argv[]) {
         {
             if( arguments->loss_rate == 0 )
             {
-                error = (int) sendto(server, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
+                error = (int) sendto(fd, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
                 if( error < 0 )
                 {
                     perror("Write error");
@@ -118,7 +125,7 @@ int main(int argc, char* argv[]) {
                 if( (rand() % arguments->loss_rate)
                     == (rand() % arguments->loss_rate) )
                 {
-                    error = (int) sendto(server, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
+                    error = (int) sendto(fd, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
                     if( error < 0 )
                     {
                         perror("Write error");
