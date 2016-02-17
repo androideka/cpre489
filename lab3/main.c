@@ -17,8 +17,8 @@ static struct argp_option options[] =
 	{"source-IP", 's', "SOURCEIP", 0, "IP number of incoming traffic"},
 	{"source-port", 'o', "SOURCEPORT", 0, "Port of incoming traffic"},
 	{"dest-IP", 'd', "DESTIP", 0, "Which IP to reroute incoming traffic"},
-    {"dest-port", 'p', "DESTPORT", 0, "Which port to send data to"},
-    {"loss-rate", 'l', "LOSSRATE", 0, "What loss rate to impose on the traffic"}
+        {"dest-port", 'p', "DESTPORT", 0, "Which port to send data to"},
+        {"loss-rate", 'l', "LOSSRATE", 0, "What loss rate to impose on the traffic"}
 	//{0}
 };
 
@@ -73,39 +73,49 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 /// The arg parser object
 static struct argp argp = {&options, parse_opt, 0, &doc};
 
-struct sockaddr_in addr, client_addr, server_addr;
+struct sockaddr_in addr;
+struct sockaddr_in client_addr, server_addr;
 
 int main(int argc, char* argv[]) {
 
     struct arguments *arguments = malloc(sizeof(*arguments));
     argp_parse(&argp, argc, argv, 0, 0, arguments);
 
-    char buffer[1024];
-    int rcv_len, fd, ClientAddrLen = sizeof(client_addr);
-    int server_len = sizeof(server_addr);
-    int packet_count = 0;
+    printf("%s, %s, %d, %d\n", arguments->source_IP, arguments->dest_IP, arguments->source_port, arguments->dest_port);
+
+    char buffer[2048];
+    int rcv_len, fd;
+    socklen_t client_len = sizeof(client_addr);
+    socklen_t server_len = sizeof(server_addr);
+    socklen_t addr_len = sizeof(addr);
+    int s, packet_count = 0;
 
     addr.sin_family = AF_INET;
-    addr.sin_port = arguments->source_port;
+    addr.sin_port = htons(arguments->source_port);
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = arguments->dest_port;
+    server_addr.sin_port = htons(arguments->dest_port);
     server_addr.sin_addr.s_addr = inet_addr(arguments->dest_IP);
 
     fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if( fd < 0 )
+    {
+	perror("Socket error");
+    }
 
-    int error = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
+    int error = bind(fd, (struct sockaddr *) &addr, sizeof(struct sockaddr));
     if( error < 0 )
     {
         perror("Bind error");
     }
 
-    listen(fd, 0);
-
     for( ; ; )
     {
-        rcv_len = (int) recvfrom(fd, buffer, 1024, 0, (struct sockaddr *) &client_addr, &ClientAddrLen);
+	printf("Waiting on port %d...\n", arguments->source_port);
+	size_t len = sizeof(buffer);
+        rcv_len = recvfrom(fd, buffer, len, 0, (struct sockaddr *) &client_addr, &client_len);
+	printf("Packet received\n");
         if( rcv_len < 0 )
         {
             perror("Accept error");
@@ -114,7 +124,7 @@ int main(int argc, char* argv[]) {
         {
             if( arguments->loss_rate == 0 )
             {
-                error = (int) sendto(fd, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
+                error = sendto(fd, buffer, len, 0, (struct sockaddr *) &server_addr, server_len);
                 if( error < 0 )
                 {
                     perror("Write error");
@@ -122,10 +132,9 @@ int main(int argc, char* argv[]) {
             }
             else if( arguments->loss_rate < 100 )
             {
-                if( (rand() % arguments->loss_rate)
-                    == (rand() % arguments->loss_rate) )
+                if( (rand() % 100) > arguments->loss_rate )
                 {
-                    error = (int) sendto(fd, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
+                    error = sendto(fd, buffer, len, 0, (struct sockaddr *) &server_addr, server_len);
                     if( error < 0 )
                     {
                         perror("Write error");
