@@ -139,7 +139,12 @@ int main(int argc, char** argv) {
     FILE* file = fopen(file_name, "w");
     if( file )
     {
-        fwrite(buffer, sizeof(char), buf_len, file);
+        fwrite(buffer, err * sizeof(char), 1, file);
+        int i = 0;
+        for( i = err; i < buf_len; i++ )
+        {
+            buffer[i] = '\0';
+        }
     }
     else
     {

@@ -13,7 +13,6 @@ struct sockaddr_in control, data, client_control, client_data;
 int main() {
 
     char buffer[2048];
-    char file_buffer[2048];
     int c, d, fd_control, fd_data, client_len;
     size_t buf_len = sizeof(buffer);
 
@@ -82,6 +81,7 @@ int main() {
         DIR *dir;
         struct dirent *ep;
         char dir_list[1028];
+        memset(dir_list, 0, sizeof(dir_list));
 
         dir = opendir("./");
         if( dir != NULL )
@@ -135,6 +135,10 @@ int main() {
         }*/
 
         FILE* file = fopen(file_name, "r");
+        fseek(file, 0L, SEEK_END);
+        int size = ftell(file);
+        fseek(file, 0L, SEEK_SET);
+        char file_buffer[size];
         if( file != NULL )
         {
             printf("Opening file %s\n", file_name);
@@ -159,6 +163,7 @@ int main() {
             perror("Final write error");
         }
 
+        memset(file_name, 0, sizeof(file_name));
         printf("Done\n");
         close(d);
         close(c);
