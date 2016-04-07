@@ -13,14 +13,22 @@ typedef struct {
 	uint8_t data[5];
 } packet_t;
 
+typedef struct {
+	uint16_t sn;
+} ack_t;
+
 struct sockaddr_in sender, receiver;
 struct timeval tv;
 
+packet_t make_packet(uint16_t sn, uint8_t data1, uint8_t data2,
+					 uint8_t data3, uint8_t data4, uint8_t data5);
+
 int main(int argc, char** argv)
 {
-	char* buffer;
+	char** buffer = malloc(6 * sizeof(char*));
 	int err, buf_len = sizeof(buffer);
-	int fd_sock;
+	int fd_sock, ss_thresh = 96;
+	int cwnd = 6;
 	socklen_t receiver_len = sizeof(receiver);
 
 	sender.sin_family = AF_INET;
@@ -37,20 +45,51 @@ int main(int argc, char** argv)
 		perror("Socket error");
 	}
 
-	buffer = "RANDOM";
+	tv.tv_sec = 3;
+	if( setsockopt(fd_sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &tv, sizeof(tv)) < 0 )
+	{
+		perror("Set timeout failed");
+	}
 
 	err = connect(fd_sock, (struct sockaddr*) &receiver, sizeof(receiver));
 	if( err < 0 )
 	{
 		perror("Connect error");
 	}
-
-	err = write(fd_sock, buffer, sizeof(buffer));
-	if( err < 0 )
+	int i = 0;
+	for( i = 0; i < 40; i++ )
 	{
-		perror("Write error");
+
+		uint8_t data1 = (rand() % 52);
+		uint8_t data2 = (rand() % 52);
+		uint8_t data3 = (rand() % 52);
+		uint8_t data4 = (rand() % 52);
+		uint8_t data5 = (rand() % 52);
+
+		packet_t packet;
+		packet = make_packet((uint16_t)(i*sizeof(packet_t)),
+							 data1, data2, data3, data4, data5);
+
+		err = write(fd_sock, &packet, sizeof(packet));
+		if( err < 0 )
+		{
+			perror("Write error");
+		}
+		memset(buffer, 0, sizeof(buffer));
+
+		err = read(fd_sock, buffer, buf_len);
+		if( err < 0 )
+		{
+			perror("Read error or socket timeout");
+			/// TODO write timeout code
+
+			continue;
+		}
+
+		ack_t* last_ack;
+		last_ack = (ack_t*) buffer;
+
 	}
-	memset(buffer, 0, sizeof(buffer));
 
 	close(fd_sock);
 
@@ -59,7 +98,7 @@ int main(int argc, char** argv)
 }
 
 
-packet_t packet(uint16_t sn, uint8_t data1, uint8_t data2,
+packet_t make_packet(uint16_t sn, uint8_t data1, uint8_t data2,
 		uint8_t data3, uint8_t data4, uint8_t data5)
 {
 	packet_t packet;

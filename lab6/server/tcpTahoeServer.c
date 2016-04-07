@@ -7,22 +7,32 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "AddCongestion.h"
-
 struct sockaddr_in server, client;
+typedef struct {
+    uint16_t sn;
+    uint8_t data[5];
+} packet_t;
 
-int main() {
+typedef struct {
+    uint16_t sn;
+} ack_t;
 
-    char buffer[8];
-    int c, fd_sock, client_len;
+int add_congestion(double p);
+
+int main(int argc, char** argv) {
+
+    char buffer[6];
+    int c, fd_sock, sn, client_len = sizeof(client);
     size_t buf_len = sizeof(buffer);
 
-    control.sin_family = AF_INET;
-    control.sin_port = htons(2021);
-    control.sin_addr.s_addr = inet_addr("127.0.0.1");
+    double p = atof(argv[1]);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(2021);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     fd_sock = socket(AF_INET, SOCK_STREAM, 0);
-    int err = bind(fd_control, (struct sockaddr*) &control, sizeof(control));
+    int err = bind(fd_sock, (struct sockaddr*) &server, sizeof(server));
     if( err < 0 )
     {
         perror("Control bind error");
@@ -30,7 +40,7 @@ int main() {
 
     listen(fd_sock, 0);
 
-    c = accept(fd_sock, (struct sockaddr*) &client_control, (socklen_t*) &client_len);
+    c = accept(fd_sock, (struct sockaddr*) &client, (socklen_t*) &client_len);
     if( c < 0 )
     {
         perror("Accept error");
@@ -45,11 +55,31 @@ int main() {
             perror("Read error");
         }
 
-        if( AddCongestion(10) != 0 )
+        if( add_congestion(p) != 0 )
         {
             continue;
         }
 
+        packet_t* packet;
+        packet = (packet_t*) buffer;
+
+        ack_t ack;
+        ack.sn = packet->sn;
+
+        sleep(1);
+
+        err = (int) write(c, &ack, sizeof(ack));
+
+
     }
 
+}
+
+int add_congestion(double p)
+{
+    if( rand() % 100 < p )
+    {
+        return 1;
+    }
+    return 0;
 }
