@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,10 +19,11 @@ typedef struct {
 } ack_t;
 
 int add_congestion(double p);
+double double_rand(double min, double max);
 
 int main(int argc, char** argv) {
 
-    char buffer[6];
+    char buffer[16];
     int c, fd_sock, sn, client_len = sizeof(client);
     size_t buf_len = sizeof(buffer);
 
@@ -48,7 +50,7 @@ int main(int argc, char** argv) {
 
     for( ; ; )
     {
-
+        memset(buffer, 0, sizeof(buffer));
         err = (int) read(c, buffer, buf_len);
         if( err < 0 )
         {
@@ -57,18 +59,22 @@ int main(int argc, char** argv) {
 
         if( add_congestion(p) != 0 )
         {
+            printf("Dropping packet\n");
             continue;
         }
 
         packet_t* packet;
-        packet = (packet_t*) buffer;
+        packet = malloc(sizeof(packet_t));
+        packet = buffer;
 
-        ack_t ack;
-        ack.sn = packet->sn;
+        ack_t* ack;
+        ack = malloc(sizeof(ack_t));
+        ack->sn = packet->sn;
 
         sleep(1);
 
-        err = (int) write(c, &ack, sizeof(ack));
+        printf("Sending ack %" PRIu16 "\n", ack->sn);
+        err = (int) write(c, &ack, sizeof(ack_t));
 
 
     }
@@ -77,9 +83,17 @@ int main(int argc, char** argv) {
 
 int add_congestion(double p)
 {
-    if( rand() % 100 < p )
+    double random1 = double_rand(0.0, 99.9);
+    if( random() % 100 < p )
     {
         return 1;
     }
     return 0;
+}
+
+double double_rand(double min, double max)
+{
+    double range = max - min;
+    double div = RAND_MAX / range;
+    return min + (rand() / div);
 }

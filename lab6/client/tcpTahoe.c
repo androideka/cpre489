@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,8 +28,9 @@ int main(int argc, char** argv)
 {
 	char** buffer = malloc(6 * sizeof(char*));
 	int err, buf_len = sizeof(buffer);
-	int fd_sock, ss_thresh = 96;
-	int cwnd = 6;
+	int fd_sock, ss_thresh = 16;
+	int cwnd = 1;
+	int curr_sn;
 	socklen_t receiver_len = sizeof(receiver);
 
 	sender.sin_family = AF_INET;
@@ -57,9 +59,16 @@ int main(int argc, char** argv)
 		perror("Connect error");
 	}
 	int i = 0;
-	for( i = 0; i < 40; i++ )
+	ack_t* ack;
+	ack = malloc(sizeof(ack_t));
+	ack_t* last_ack;
+	last_ack = malloc(sizeof(ack_t));
+	int dup_count = 0;
+	last_ack->sn = 0;
+	while( i < 40 )
 	{
-
+		memset(buffer, 0, sizeof(buffer));
+		printf("%d\n", cwnd);
 		uint8_t data1 = (rand() % 52);
 		uint8_t data2 = (rand() % 52);
 		uint8_t data3 = (rand() % 52);
@@ -67,7 +76,8 @@ int main(int argc, char** argv)
 		uint8_t data5 = (rand() % 52);
 
 		packet_t packet;
-		packet = make_packet((uint16_t)(i*sizeof(packet_t)),
+		uint16_t sn = i * sizeof(packet_t);
+		packet = make_packet(sn,
 							 data1, data2, data3, data4, data5);
 
 		err = write(fd_sock, &packet, sizeof(packet));
@@ -75,19 +85,45 @@ int main(int argc, char** argv)
 		{
 			perror("Write error");
 		}
-		memset(buffer, 0, sizeof(buffer));
 
 		err = read(fd_sock, buffer, buf_len);
 		if( err < 0 )
 		{
 			perror("Read error or socket timeout");
-			/// TODO write timeout code
-
+			ss_thresh = cwnd / 2;
+			cwnd = 1;
 			continue;
 		}
 
-		ack_t* last_ack;
-		last_ack = (ack_t*) buffer;
+		ack = buffer;
+
+		//printf("New ACK sn: %" PRIu16 ", last ACK sn: %" PRIu16"\n", ack->sn, last_ack->sn);
+
+		if( ack->sn != sn )
+		{
+			// New ACK
+			if( cwnd < ss_thresh )
+			{
+				if( cwnd * 2 > ss_thresh )
+					cwnd = ss_thresh;
+				else
+					cwnd *= 2;
+			}
+			else
+			{
+				cwnd++;
+			}
+		}
+		else if( ++dup_count == 3 )
+		{
+			dup_count = 0;
+			ss_thresh = cwnd / 2;
+			cwnd = 1;
+			continue;
+		}
+
+		last_ack->sn = ack->sn;
+		i++;
 
 	}
 
