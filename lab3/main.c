@@ -80,14 +80,15 @@ int main(int argc, char* argv[]) {
     struct arguments *arguments = malloc(sizeof(*arguments));
     argp_parse(&argp, argc, argv, 0, 0, arguments);
 
-    char buffer[1024];
+    char buffer[2048];
+    size_t len = sizeof(buffer);
     int rcv_len, fd, ClientAddrLen = sizeof(client_addr);
     int server_len = sizeof(server_addr);
     int packet_count = 0;
 
     addr.sin_family = AF_INET;
     addr.sin_port = arguments->source_port;
-    addr.sin_addr.s_addr = inet_addr("192.168.1.144");
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");//"192.168.1.104");
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = arguments->dest_port;
@@ -101,11 +102,11 @@ int main(int argc, char* argv[]) {
         perror("Bind error");
     }
 
-    listen(fd, 0);
-
     for( ; ; )
     {
-        rcv_len = (int) recvfrom(fd, buffer, 1024, 0, (struct sockaddr *) &client_addr, &ClientAddrLen);
+	printf("Waiting for messages...\n");
+        rcv_len = (int) recvfrom(fd, buffer, len, 0, (struct sockaddr *) &client_addr, &ClientAddrLen);
+	printf("Message received\n");
         if( rcv_len < 0 )
         {
             perror("Accept error");
@@ -114,7 +115,8 @@ int main(int argc, char* argv[]) {
         {
             if( arguments->loss_rate == 0 )
             {
-                error = (int) sendto(fd, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
+		printf("Sending UDP packet\n");
+                error = (int) sendto(fd, buffer, len, 0, (struct sockaddr *) &server_addr, &server_len);
                 if( error < 0 )
                 {
                     perror("Write error");
@@ -125,7 +127,7 @@ int main(int argc, char* argv[]) {
                 if( (rand() % arguments->loss_rate)
                     == (rand() % arguments->loss_rate) )
                 {
-                    error = (int) sendto(fd, buffer, 1024, 0, (struct sockaddr *) &server_addr, &server_len);
+                    error = (int) sendto(fd, buffer, len, 0, (struct sockaddr *) &server_addr, &server_len);
                     if( error < 0 )
                     {
                         perror("Write error");
