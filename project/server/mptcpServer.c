@@ -1,3 +1,4 @@
+#include <argp.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
@@ -8,7 +9,57 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-struct sockaddr_in server, client;
+
+static char* doc = "CprE 489 Final Project - MPTCP Server";
+
+// list of options supported
+static struct argp_option options[] =
+{
+	{"source-IP", 's', "SOURCEIP", 0, "IP number of incoming traffic"},
+	{"source-port", 'p', "SOURCEPORT", 0, "Port of incoming traffic"},
+	//{0}
+};
+
+
+/// argument structure to store the results of command line parsing
+struct arguments
+{
+    char* source_IP;
+    int source_port;
+};
+
+
+/**
+ * @brief     Callback to parse a command line argument
+ * @param     key
+ *                 The short code key of this argument
+ * @param     arg
+ *                 The argument following the code
+ * @param     state
+ *                 The state of the arg parser state machine
+ * @return    0 if successfully handled the key, ARGP_ERR_UNKNOWN if the key was unknown
+ */
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+    struct arguments *arguments = state->input;
+    switch(key)
+    {
+        case 's':
+            arguments->source_IP= arg;
+            break;
+        case 'p':
+            arguments->source_port = atoi(arg);
+            break;
+        default:
+            return ARGP_ERR_UNKNOWN;
+    }
+    return 0;
+}
+
+/// The arg parser object
+static struct argp argp = {&options, parse_opt, 0, &doc};
+
+struct sockaddr_in server, client, sub1, sub2, sub3;
 typedef struct {
     uint16_t sn;
     uint8_t data[5];
@@ -18,32 +69,30 @@ typedef struct {
     uint16_t sn;
 } ack_t;
 
-int add_congestion(double p);
-double double_rand(double min, double max);
 
 int main(int argc, char** argv) {
 
-    char buffer[16];
-    int c, fd_sock, sn, client_len = sizeof(client);
-    size_t buf_len = sizeof(buffer);
+    struct arguments *arguments = malloc(sizeof(*arguments));
+    argp_parse(&argp, argc, argv, 0, 0, arguments);
 
-    double p = atof(argv[1]);
+    char buffer[16];
+    int control_sock, fd_server, client_len = sizeof(client);
 
     server.sin_family = AF_INET;
-    server.sin_port = htons(2021);
-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server.sin_port = htons(arguments->source_port);
+    server.sin_addr.s_addr = inet_addr(arguments->source_IP);
 
-    fd_sock = socket(AF_INET, SOCK_STREAM, 0);
-    int err = bind(fd_sock, (struct sockaddr*) &server, sizeof(server));
+    fd_server = socket(AF_INET, SOCK_STREAM, 0);
+    int err = bind(fd_server, (struct sockaddr*) &server, sizeof(server));
     if( err < 0 )
     {
         perror("Control bind error");
     }
 
-    listen(fd_sock, 0);
+    listen(fd_server, 0);
 
-    c = accept(fd_sock, (struct sockaddr*) &client, (socklen_t*) &client_len);
-    if( c < 0 )
+    control_sock = accept(fd_server, (struct sockaddr*) &client, (socklen_t*) &client_len);
+    if( control_sock < 0 )
     {
         perror("Accept error");
     }
@@ -51,49 +100,13 @@ int main(int argc, char** argv) {
     for( ; ; )
     {
         memset(buffer, 0, sizeof(buffer));
-        err = (int) read(c, buffer, buf_len);
+        err = (int) read(control_sock, buffer, sizeof(buffer));
         if( err < 0 )
         {
             perror("Read error");
         }
 
-        if( add_congestion(p) != 0 )
-        {
-            printf("Dropping packet\n");
-            continue;
-        }
-
-        packet_t* packet;
-        packet = malloc(sizeof(packet_t));
-        packet = buffer;
-
-        ack_t* ack;
-        ack = malloc(sizeof(ack_t));
-        ack->sn = packet->sn;
-
-        sleep(1);
-
-        printf("Sending ack %" PRIu16 "\n", ack->sn);
-        err = (int) write(c, &ack, sizeof(ack_t));
-
-
+        err = (int) write(control_sock, &buffer, sizeof(buffer));
     }
 
-}
-
-int add_congestion(double p)
-{
-    double random1 = double_rand(0.0, 99.9);
-    if( random() % 100 < p )
-    {
-        return 1;
-    }
-    return 0;
-}
-
-double double_rand(double min, double max)
-{
-    double range = max - min;
-    double div = RAND_MAX / range;
-    return min + (rand() / div);
 }

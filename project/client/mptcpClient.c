@@ -1,3 +1,4 @@
+#include <argp.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
@@ -9,6 +10,66 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+
+static char* doc = "CprE 489 Project - Multi-Path TCP";
+
+// list of options supported
+static struct argp_option options[] =
+{
+	{"source-IP", 's', "SOURCEIP", 0, "IP number of incoming traffic"},
+	{"source-port", 'o', "SOURCEPORT", 0, "Port of incoming traffic"},
+	{"dest-IP", 'd', "DESTIP", 0, "Which IP to reroute incoming traffic"},
+        {"dest-port", 'p', "DESTPORT", 0, "Which port to send data to"},
+	//{0}
+};
+
+
+/// argument structure to store the results of command line parsing
+struct arguments
+{
+    char* source_IP;
+    int source_port;
+    char* dest_IP;
+    int dest_port;
+};
+
+
+/**
+ * @brief     Callback to parse a command line argument
+ * @param     key
+ *                 The short code key of this argument
+ * @param     arg
+ *                 The argument following the code
+ * @param     state
+ *                 The state of the arg parser state machine
+ * @return    0 if successfully handled the key, ARGP_ERR_UNKNOWN if the key was unknown
+ */
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+    struct arguments *arguments = state->input;
+    switch(key)
+    {
+        case 's':
+            arguments->source_IP= arg;
+            break;
+        case 'o':
+            arguments->source_port = atoi(arg);
+            break;
+        case 'd':
+            arguments->dest_IP = arg;
+            break;
+        case 'p':
+            arguments->dest_port = atoi(arg);
+            break;
+        default:
+            return ARGP_ERR_UNKNOWN;
+    }
+    return 0;
+}
+
+/// The arg parser object
+static struct argp argp = {&options, parse_opt, 0, &doc};
+
 typedef struct {
 	uint16_t sn;
 	uint8_t data[5];
@@ -18,131 +79,74 @@ typedef struct {
 	uint16_t sn;
 } ack_t;
 
-struct sockaddr_in sender, receiver;
-struct timeval tv;
+struct sockaddr_in control_client, control_server, subflow_1, subflow_2, subflow_3;
 
-packet_t make_packet(uint16_t sn, uint8_t data1, uint8_t data2,
-					 uint8_t data3, uint8_t data4, uint8_t data5);
 
 int main(int argc, char** argv)
 {
+
+	struct arguments *arguments = malloc(sizeof(*arguments));
+        argp_parse(&argp, argc, argv, 0, 0, arguments);
+
 	char** buffer = malloc(6 * sizeof(char*));
-	int err, buf_len = sizeof(buffer);
-	int fd_sock, ss_thresh = 16;
-	int cwnd = 1;
-	int curr_sn;
-	socklen_t receiver_len = sizeof(receiver);
+	
+	int err = 0;
+	int fd_control, i;
+	socklen_t control_len = sizeof(control_client);
+	socklen_t subflow_len = sizeof(subflow_1);
 
-	sender.sin_family = AF_INET;
-	sender.sin_port = htons(2020);
-	sender.sin_addr.s_addr = inet_addr("127.0.0.1");
+	for( i = 0; i < 16; i++ )
+	{
+		
+	}
 
-	receiver.sin_family = AF_INET;
-	receiver.sin_port = htons(2021);
-	receiver.sin_addr.s_addr = inet_addr("127.0.0.1");
+	control_client.sin_family = AF_INET;
+	control_client.sin_port = htons(arguments->source_port);
+	control_client.sin_addr.s_addr = inet_addr(arguments->source_IP);
 
-	fd_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if( fd_sock < 0 )
+	control_server.sin_family = AF_INET;
+	control_server.sin_port = htons(arguments->dest_port);
+	control_server.sin_addr.s_addr = inet_addr(arguments->dest_IP);
+
+	fd_control = socket(AF_INET, SOCK_STREAM, 0);
+	if( fd_control < 0 )
 	{
 		perror("Socket error");
 	}
 
-	tv.tv_sec = 3;
-	if( setsockopt(fd_sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &tv, sizeof(tv)) < 0 )
-	{
-		perror("Set timeout failed");
-	}
-
-	err = connect(fd_sock, (struct sockaddr*) &receiver, sizeof(receiver));
+	err = connect(fd_control, (struct sockaddr*) &control_server, sizeof(control_server));
 	if( err < 0 )
 	{
 		perror("Connect error");
 	}
-	int i = 0;
+
+	printf("Successfully connected to server.\n");
+	return 0;
+
 	ack_t* ack;
 	ack = malloc(sizeof(ack_t));
 	ack_t* last_ack;
 	last_ack = malloc(sizeof(ack_t));
-	int dup_count = 0;
-	last_ack->sn = 0;
-	while( i < 40 )
+	
+	for( i = 0; i < 16; i++ )
 	{
 		memset(buffer, 0, sizeof(buffer));
-		printf("%d\n", cwnd);
-		uint8_t data1 = (rand() % 52);
-		uint8_t data2 = (rand() % 52);
-		uint8_t data3 = (rand() % 52);
-		uint8_t data4 = (rand() % 52);
-		uint8_t data5 = (rand() % 52);
 
-		packet_t packet;
-		uint16_t sn = i * sizeof(packet_t);
-		packet = make_packet(sn,
-							 data1, data2, data3, data4, data5);
-
-		err = write(fd_sock, &packet, sizeof(packet));
+		err = write(fd_control, &buffer, sizeof(buffer));
 		if( err < 0 )
 		{
 			perror("Write error");
 		}
 
-		err = read(fd_sock, buffer, buf_len);
+		err = read(fd_control, &buffer, sizeof(buffer));
 		if( err < 0 )
 		{
-			perror("Read error or socket timeout");
-			ss_thresh = cwnd / 2;
-			cwnd = 1;
-			continue;
+			perror("Read error");
 		}
-
-		ack = buffer;
-
-		//printf("New ACK sn: %" PRIu16 ", last ACK sn: %" PRIu16"\n", ack->sn, last_ack->sn);
-
-		if( ack->sn != sn )
-		{
-			// New ACK
-			if( cwnd < ss_thresh )
-			{
-				if( cwnd * 2 > ss_thresh )
-					cwnd = ss_thresh;
-				else
-					cwnd *= 2;
-			}
-			else
-			{
-				cwnd++;
-			}
-		}
-		else if( ++dup_count == 3 )
-		{
-			dup_count = 0;
-			ss_thresh = cwnd / 2;
-			cwnd = 1;
-			continue;
-		}
-
-		last_ack->sn = ack->sn;
-		i++;
-
 	}
 
-	close(fd_sock);
+	close(fd_control);
 
 	return 0;
 
-}
-
-
-packet_t make_packet(uint16_t sn, uint8_t data1, uint8_t data2,
-		uint8_t data3, uint8_t data4, uint8_t data5)
-{
-	packet_t packet;
-	packet.sn = sn;
-	packet.data[0] = data1;
-	packet.data[1] = data2;
-	packet.data[2] = data3;
-	packet.data[3] = data4;
-	packet.data[4] = data5;
-	return packet;
 }
