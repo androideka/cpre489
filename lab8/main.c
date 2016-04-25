@@ -10,7 +10,7 @@
 #include "introduceerror.h"
 
 typedef uint16_t crc;
-#define POLY 0x88408
+#define POLY 0x1021
 
 void printBits(size_t const size, void const * const ptr);
 
