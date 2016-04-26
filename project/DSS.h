@@ -8,8 +8,8 @@
 #include <inttypes.h>
 
 typedef struct {
-    uint32_t sub_seq_num;
-    uint32_t data_seq_num;
+    int sub_seq_num;
+    int data_seq_num;
     uint32_t data_ACK;
     uint8_t kind;
     uint8_t length;

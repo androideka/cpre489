@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -96,6 +97,7 @@ int main(int argc, char** argv)
 	socklen_t control_len = sizeof(control_client);
 	socklen_t subflow_len = sizeof(subflow_1);
 	char data[992] = "";
+	int dif1, dif2, dif3, a, b, c;
 
 	char repeat[62] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -112,10 +114,6 @@ int main(int argc, char** argv)
 	control_server.sin_port = htons(arguments->dest_port);
 	control_server.sin_addr.s_addr = inet_addr(arguments->dest_IP);
 
-	unlink("pipe1");
-	unlink("pipe2");
-	unlink("pipe3");
-
 	int u_fds[3] = { u_fd_s1, u_fd_s2, u_fd_s3 };
 
 	struct sockaddr_in in_socks[3] = { subflow_1, subflow_2, subflow_3 };
@@ -129,6 +127,10 @@ int main(int argc, char** argv)
 	u_fd_s2 = socket(AF_UNIX, SOCK_STREAM, 0);
 	u_fd_s3 = socket(AF_UNIX, SOCK_STREAM, 0);
 
+	dif1 = socket(AF_UNIX, SOCK_STREAM, 0);
+	dif2 = socket(AF_UNIX, SOCK_STREAM, 0);
+	dif3 = socket(AF_UNIX, SOCK_STREAM, 0);
+
 	subflow_1.sin_family = AF_INET;
 	subflow_1.sin_port = htons(++arguments->dest_port);
 	subflow_1.sin_addr.s_addr = inet_addr(arguments->dest_IP);
@@ -141,25 +143,78 @@ int main(int argc, char** argv)
 	subflow_3.sin_port = htons(++arguments->dest_port);
 	subflow_3.sin_addr.s_addr = inet_addr(arguments->dest_IP);
 
+	memset(&pipe1, 0, sizeof(pipe1));
+	memset(&pipe2, 0, sizeof(pipe2));
+	memset(&pipe3, 0, sizeof(pipe3));
+
 	pipe1.sun_family = AF_UNIX;
 	pipe2.sun_family = AF_UNIX;
 	pipe3.sun_family = AF_UNIX;
 
-	strncpy(pipe1.sun_path, "pipe1", sizeof(pipe1.sun_path) - 1);
-	strncpy(pipe2.sun_path, "pipe2", sizeof(pipe2.sun_path) - 1);
-	strncpy(pipe3.sun_path, "pipe3", sizeof(pipe3.sun_path) - 1);
+	socklen_t pipe_len = sizeof(pipe1);
 
-	err = bind(u_fd_s1, (struct sockaddr*) &pipe1, sizeof(pipe1));
-	err = bind(u_fd_s2, (struct sockaddr*) &pipe2, sizeof(pipe2));
-	err = bind(u_fd_s3, (struct sockaddr*) &pipe3, sizeof(pipe3));
+	char path1[] = "pipe1";
+	char path2[] = "pipe2";
+	char path3[] = "pipe3";
+
+	mkdir(path1, 077);
+	mkdir(path2, 077);
+	mkdir(path3, 077);
+
+	strcat(path1, "/u_fd_s1");
+	strcat(path2, "/u_fd_s2");
+	strcat(path3, "/u_fd_s3");
+
+	strcpy(pipe1.sun_path, path1);
+	strcpy(pipe2.sun_path, path2);
+	strcpy(pipe3.sun_path, path3);
+
+	unlink("pipe1/u_fd_s1");
+	unlink("pipe2/u_fd_s2");
+	unlink("pipe3/u_fd_s3");
+
+	//strncpy(pipe1.sun_path, "pipe1", sizeof(pipe1.sun_path) - 1);
+	//strncpy(pipe2.sun_path, "pipe2", sizeof(pipe2.sun_path) - 1);
+	//strncpy(pipe3.sun_path, "pipe3", sizeof(pipe3.sun_path) - 1);
+
+	err = bind(u_fd_s1, (struct sockaddr*) &pipe1, (strlen(pipe1.sun_path) + sizeof(pipe1.sun_family)));
+	if( err < 0 )
+	{
+		perror("Pipe 1 bind error");
+	}
+
+	err = bind(u_fd_s2, (struct sockaddr*) &pipe2, (strlen(pipe2.sun_path) + sizeof(pipe2.sun_family)));
+	if( err < 0 )
+	{
+		perror("Pipe 2 bind error");
+	}
+
+	err = bind(u_fd_s3, (struct sockaddr*) &pipe3, (strlen(pipe3.sun_path) + sizeof(pipe3.sun_family)));
 
 	if( err < 0 )
 	{
-		perror("Pipe bind error");
+		perror("Pipe 3 bind error");
 	}
 
-	//err = connect(u_fd_s1, )
+	chmod(path1, 0777);
+	chmod(path2, 0777);
+	chmod(path3, 0777);
 
+	err = listen(u_fd_s1, 0);
+	if ( err < 0 )
+	{
+		perror("Listen error");
+	}
+	err = listen(u_fd_s2, 0);
+	if ( err < 0 )
+	{
+		perror("Listen error");
+	}
+	err = listen(u_fd_s3, 0);
+	if ( err < 0 )
+	{
+		perror("Listen error");
+	}
 
 	fd_control = socket(AF_INET, SOCK_STREAM, 0);
 	if( fd_control < 0 )
@@ -190,39 +245,93 @@ int main(int argc, char** argv)
 	{
 		perror("Connect d3 error");
 	}
-
-	printf("Successfully connected control and subflows to server.\n");
+	else
+	{
+		printf("Successfully connected control and subflows to server.\n");
+	}
 
 	i = 0;
 
 	pid_t first_child, second_child, third_child;
 	first_child = fork();
 
+	printf("Hello\n");
+
 	if( first_child > 0 )
 	{
-		// Parent process
 		second_child = fork();
 		if( second_child > 0 )
 		{
 			// Parent process
+			err = connect(dif1, (struct sockaddr*) &pipe1, sizeof(pipe1));
+			if( err < 0 )
+			{
+				perror("Unix socket 1 connect error");
+			}
+
+			err = connect(dif2, (struct sockaddr*) &pipe2, sizeof(pipe2));
+			if( err < 0 )
+			{
+				perror("Unix socket 2 connect error");
+			}
+
+			err = connect(dif3, (struct sockaddr*) &pipe3, sizeof(pipe3));
+			if( err < 0 )
+			{
+				perror("Unix socket 3 connect error");
+			}
+
+
 			for( i = 0; i < 248; i++ )
 			{
 				char byte[4];
-				printf("Hello\n");
-				memcpy( byte, data[i*4], 4 );
+				strncpy( byte, data + i*4, 4 );
 				if( i % 3 == 0 )
 				{
 					// Subflow 1
+					printf("Writing 4 bytes to subflow 1\n");
+					err = write(dif1, byte, sizeof(byte));
+					if ( err < 0 )
+					{
+						perror("Unix socket 1 write error");
+					}
 				}
 				else if ( i % 3 == 1 )
 				{
 					// Subflow 2
+					printf("Writing 4 bytes to subflow 2\n");
+					err = write(dif2, byte, sizeof(byte));
+					if ( err < 0 )
+					{
+						perror("Unix socket 2 write error");
+					}
 				}
 				else
 				{
 					// Subflow 3
+					printf("Writing 4 bytes to subflow 3\n");
+					err = write(dif3, byte, sizeof(byte));
+					if ( err < 0 )
+					{
+						perror("Unix socket 3 write error");
+					}
+				}
+
+				DSS_t* dss;
+				dss = malloc(sizeof(DSS_t));
+				dss->sub_seq_num = i % 3;
+				dss->data_length = 4;
+				dss->data_seq_num = i*4;
+
+				printf("Sending DSS for packet sent on %d with sequence number %d\n", dss->sub_seq_num, dss->data_seq_num);
+
+				err = write(fd_control, &dss, sizeof(DSS_t));
+				if( err < 0 )
+				{
+					perror("Control write error");
 				}
 			}
+			sleep(5);
 		}
 		else if ( second_child < 0 )
 		{
@@ -232,6 +341,30 @@ int main(int argc, char** argv)
 		else
 		{
 			// Second child
+			char buffer[4];
+			a = accept(u_fd_s2, (struct sockaddr*) &pipe2, &pipe_len);
+			for( ; ; )
+			{
+				printf("Accepted connection from 2.\n");
+				if( a < 0 )
+				{
+					perror("Accept 2 error");
+				}
+
+				err = read(a, buffer, 4);
+				if( err < 0 )
+				{
+					perror("Read 2 error");
+				}
+
+				printf("Bytes from 2: %s\n", buffer);
+
+				err = write(d2, buffer, 4);
+				if( err < 0 )
+				{
+					perror("Write 2 error");
+				}
+			}
 		}
 	}
 	else if ( first_child < 0 )
@@ -245,6 +378,30 @@ int main(int argc, char** argv)
 		if( third_child > 0 )
 		{
 			// First child
+			char buffer[4];
+			b = accept(u_fd_s1, (struct sockaddr*) &pipe1, &pipe_len);
+			for( ; ; )
+			{
+				printf("Accepted connection from 1.\n");
+				if( b < 0 )
+				{
+					perror("Accept 1 error");
+				}
+
+				err = read(b, buffer, 4);
+				if( err < 0 )
+				{
+					perror("Read 1 error");
+				}
+
+				printf("Bytes from 1: %s\n", buffer);
+
+				err = write(d1, buffer, 4);
+				if( err < 0 )
+				{
+					perror("Write 1 error");
+				}
+			}
 		}
 		else if ( third_child < 0 )
 		{
@@ -254,8 +411,32 @@ int main(int argc, char** argv)
 		else
 		{
 			// Third child
+			char buffer[4];
+			c = accept(u_fd_s3, (struct sockaddr*) &pipe3, &pipe_len);
+			for( ; ; )
+			{
+				printf("Accepted connection from 3.\n");
+				if( c < 0 )
+				{
+					perror("Accept error");
+				}
+
+				err = read(c, buffer, 4);
+				if( err < 0 )
+				{
+					perror("Read 3 error");
+				}
+
+				printf("Bytes from 3: %s\n", buffer);
+
+				err = write(d3, buffer, 4);
+				if( err < 0 )
+				{
+					perror("Write 3 error");
+				}
+			}
 		}
 	}
 
-	return 0;
+	return 42;
 }

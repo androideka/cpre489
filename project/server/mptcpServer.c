@@ -83,6 +83,7 @@ int main(int argc, char** argv) {
     char buffer[16];
     int control_sock, fd_server, client_len = sizeof(client), sub_len = sizeof(sub1);
     int u_fd_s1, u_fd_s2, u_fd_s3, d1, d2, d3, d1_sock, d2_sock, d3_sock;
+    int i;
 
     server.sin_family = AF_INET;
     server.sin_port = htons(arguments->source_port);
@@ -137,17 +138,76 @@ int main(int argc, char** argv) {
     u_fd_s2 = socket(AF_UNIX, SOCK_STREAM, 0);
     u_fd_s3 = socket(AF_UNIX, SOCK_STREAM, 0);
 
+    memset(&pipe1, 0, sizeof(pipe1));
+    memset(&pipe2, 0, sizeof(pipe2));
+    memset(&pipe3, 0, sizeof(pipe3));
+
     pipe1.sun_family = AF_UNIX;
     pipe2.sun_family = AF_UNIX;
     pipe3.sun_family = AF_UNIX;
 
-    strncpy(pipe1.sun_path, "pipe1", sizeof(pipe1.sun_path) - 1);
-    strncpy(pipe2.sun_path, "pipe2", sizeof(pipe2.sun_path) - 1);
-    strncpy(pipe3.sun_path, "pipe3", sizeof(pipe3.sun_path) - 1);
+    char path1[] = "pipe1";
+    char path2[] = "pipe2";
+    char path3[] = "pipe3";
 
-    bind(u_fd_s1, (struct sockaddr*) &pipe1, sizeof(pipe1));
-    bind(u_fd_s2, (struct sockaddr*) &pipe2, sizeof(pipe2));
-    bind(u_fd_s3, (struct sockaddr*) &pipe3, sizeof(pipe3));
+    mkdir(path1, 077);
+    mkdir(path2, 077);
+    mkdir(path3, 077);
+
+    strcat(path1, "/u_fd_s1");
+    strcat(path2, "/u_fd_s2");
+    strcat(path3, "/u_fd_s3");
+
+    strcpy(pipe1.sun_path, path1);
+    strcpy(pipe2.sun_path, path2);
+    strcpy(pipe3.sun_path, path3);
+
+    unlink("pipe1/u_fd_s1");
+    unlink("pipe2/u_fd_s2");
+    unlink("pipe3/u_fd_s3");
+
+    err = bind(u_fd_s1, (struct sockaddr*) &pipe1, (strlen(pipe1.sun_path) + sizeof(pipe1.sun_family)));
+    if( err < 0 )
+    {
+        perror("Pipe 1 bind error");
+    }
+
+    err = bind(u_fd_s2, (struct sockaddr*) &pipe2, (strlen(pipe2.sun_path) + sizeof(pipe2.sun_family)));
+    if( err < 0 )
+    {
+        perror("Pipe 2 bind error");
+    }
+
+    err = bind(u_fd_s3, (struct sockaddr*) &pipe3, (strlen(pipe3.sun_path) + sizeof(pipe3.sun_family)));
+
+    if( err < 0 )
+    {
+        perror("Pipe 3 bind error");
+    }
+
+    chmod(path1, 0777);
+    chmod(path2, 0777);
+    chmod(path3, 0777);
+
+    err = listen(u_fd_s1, 0);
+    if ( err < 0 )
+    {
+        perror("Listen error");
+    }
+    err = listen(u_fd_s2, 0);
+    if ( err < 0 )
+    {
+        perror("Listen error");
+    }
+    err = listen(u_fd_s3, 0);
+    if ( err < 0 )
+    {
+        perror("Listen error");
+    }
+
+    //bind(u_fd_s1, (struct sockaddr*) &pipe1, sizeof(pipe1));
+    //bind(u_fd_s2, (struct sockaddr*) &pipe2, sizeof(pipe2));
+    //bind(u_fd_s3, (struct sockaddr*) &pipe3, sizeof(pipe3));
 
     listen(fd_server, 0);
     listen(d1, 0);
@@ -178,30 +238,58 @@ int main(int argc, char** argv) {
         perror("d3 accept error");
     }
 
-
+    // Spawn some helpers
     pid_t first_child, second_child, third_child;
     first_child = fork();
 
     if( first_child > 0 )
     {
-        // Parent process
         second_child = fork();
         if( second_child > 0 )
         {
             // Parent process
+            char buffer[sizeof(DSS_t)];
+            for( i = 0; i < 248; i++ )
+            {
+                err = read(control_sock, buffer, sizeof(buffer));
+                if( err < 0 )
+                {
+                    perror("Control read error");
+                }
+
+                DSS_t* dss;
+                dss = malloc(sizeof(DSS_t));
+                dss = (DSS_t*) buffer;
+
+                printf("Received packet number %d from subflow %d\n", dss->data_seq_num, dss->sub_seq_num);
+            }
         }
         else if ( second_child < 0 )
         {
             // Error
+            perror("Fork error");
         }
         else
         {
             // Second child
+            char buffer[5];
+            for( ; ; )
+            {
+                err = read(d2_sock, buffer, sizeof(buffer));
+                if( err < 0 )
+                {
+                    perror("Read 2 error");
+                }
+                buffer[4] = '\0';
+
+                printf("%s\n", buffer);
+            }
         }
     }
     else if ( first_child < 0 )
     {
         // Error
+        perror("Fork error");
     }
     else
     {
@@ -209,28 +297,40 @@ int main(int argc, char** argv) {
         if( third_child > 0 )
         {
             // First child
+            char buffer[5];
+            for( ; ; )
+            {
+                err = read(d1_sock, buffer, sizeof(buffer));
+                if( err < 0 )
+                {
+                    perror("Read 1 error");
+                }
+                buffer[4] = '\0';
+
+                printf("%s\n", buffer);
+            }
         }
         else if ( third_child < 0 )
         {
             // Error
+            perror("Fork failed");
         }
         else
         {
             // Third child
+            char buffer[5];
+            for( ; ; )
+            {
+                err = read(d3_sock, buffer, sizeof(buffer));
+                if( err < 0 )
+                {
+                    perror("Read 3 error");
+                }
+                buffer[4] = '\0';
+
+                printf("%s\n", buffer);
+            }
         }
-    }
-
-
-    for( ; ; )
-    {
-        memset(buffer, 0, sizeof(buffer));
-        err = (int) read(control_sock, buffer, sizeof(buffer));
-        if( err < 0 )
-        {
-            perror("Read error");
-        }
-
-        err = (int) write(control_sock, &buffer, sizeof(buffer));
     }
 
 }
